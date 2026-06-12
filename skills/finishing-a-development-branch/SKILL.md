@@ -191,11 +191,11 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
 
-## Step 7: Write Loop State (loop sessions only)
+### Step 7: Write Loop State (loop sessions only)
 
 **Only run this step if this session was started by an external loop controller** — that is, the session context includes an active work item id (`loop_item_id`) and a start timestamp (`loop_started_at`). If not in a loop session, skip this step entirely.
 
-### Generate UUID
+#### Generate UUID
 
 Generate a UUID for this session. This UUID is both the `run_id` field and the state file name.
 
@@ -209,7 +209,7 @@ $uuid = [System.Guid]::NewGuid().ToString()
 uuid=$(python3 -c "import uuid; print(uuid.uuid4())")
 ```
 
-### Determine Outcome
+#### Determine Outcome
 
 | `completion.action` | `outcome` |
 |---------------------|-----------|
@@ -220,7 +220,7 @@ uuid=$(python3 -c "import uuid; print(uuid.uuid4())")
 
 **Note on `kept` outcome:** When the human chose to keep the branch as-is (Option 3), set `action: "kept"` and `outcome: "needs_human"`. This is not a failure — it is a deliberate pause. The blocker fields indicate where work stopped and what remains to be decided.
 
-### Build the Run Record
+#### Build the Run Record
 
 Construct the following JSON object from context accumulated throughout this session:
 
@@ -299,7 +299,7 @@ Construct the following JSON object from context accumulated throughout this ses
 - `reason`: `"Human chose to keep branch for later review — iteration paused"`
 - `question_for_human`: A summary of what remains to be decided, e.g., `"Should this be merged to main, converted to a PR, or discarded? What's blocking the decision?"`
 
-### Write `state/<uuid>.json`
+#### Write `state/<uuid>.json`
 
 **Important:** Before running the snippets below, construct the run record object in memory from the JSON schema above:
 - **PowerShell:** `$runRecord` (a PSCustomObject or hashtable with all fields from the schema)
@@ -329,7 +329,7 @@ print(json.dumps(json.load(sys.stdin), indent=2))
 " > "$base/state/$uuid.json"
 ```
 
-### Update `work-items/work-items.json`
+#### Update `work-items/work-items.json`
 
 **Error handling:** If `work-items.json` does not exist or no item matches `loop_item_id`, log a warning message but do not fail the session. The state file is the source of truth; work-items.json is a cache.
 
@@ -391,22 +391,27 @@ if (-not (Test-Path $workItemsPath)) {
 **Bash:**
 ```bash
 base="$HOME/.config/superpowers/loop"
-workItemsPath="$base/work-items/work-items.json"
-
-if [ ! -f "$workItemsPath" ]; then
-    echo "WARNING: work-items.json not found at $workItemsPath — skipping update" >&2
+if [ ! -f "$base/work-items/work-items.json" ]; then
+    echo "WARNING: work-items.json not found, skipping update" >&2
 else
-    python3 -c "
-import json, sys
+    LOOP_RUN_RECORD="$RUN_RECORD_JSON" \
+    LOOP_ITEM_ID="$LOOP_ITEM_ID" \
+    LOOP_UUID="$uuid" \
+    python3 - <<'PYEOF'
+import json, os, sys
 from datetime import datetime, timezone
 
+base = os.path.expanduser("~/.config/superpowers/loop")
 with open(f'{base}/work-items/work-items.json') as f:
     data = json.load(f)
 
-run = json.loads('''$RUN_RECORD_JSON''')
-item = next((i for i in data['items'] if i['id'] == '$LOOP_ITEM_ID'), None)
+run = json.loads(os.environ['LOOP_RUN_RECORD'])
+item_id = os.environ['LOOP_ITEM_ID']
+uuid = os.environ['LOOP_UUID']
+item = next((i for i in data['items'] if i['id'] == item_id), None)
+
 if item is None:
-    print('Warning: item $LOOP_ITEM_ID not found in work-items.json', file=sys.stderr)
+    print(f'WARNING: item {item_id} not found in work-items.json', file=sys.stderr)
     sys.exit(0)
 
 now = datetime.now(timezone.utc).isoformat()
@@ -414,7 +419,7 @@ outcome = run.get('outcome')
 
 if outcome == 'done':
     item['status'] = 'done'
-    item['state_id'] = '$uuid'
+    item['state_id'] = uuid
     item['updated_at'] = now
 else:
     blocker = run.get('blocker') or {}
@@ -427,11 +432,11 @@ else:
 
 with open(f'{base}/work-items/work-items.json', 'w') as f:
     json.dump(data, f, indent=2)
-"
+PYEOF
 fi
 ```
 
-### Report
+#### Report
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
