@@ -218,6 +218,8 @@ uuid=$(python3 -c "import uuid; print(uuid.uuid4())")
 | `kept` | `needs_human` |
 | `discarded` | `done` |
 
+**Note on `kept` outcome:** When the human chose to keep the branch as-is (Option 3), set `action: "kept"` and `outcome: "needs_human"`. This is not a failure — it is a deliberate pause. The blocker fields indicate where work stopped and what remains to be decided.
+
 ### Build the Run Record
 
 Construct the following JSON object from context accumulated throughout this session:
@@ -237,12 +239,12 @@ Construct the following JSON object from context accumulated throughout this ses
 
   "spec": {
     "path": "<spec doc path written during brainstorming>",
-    "commit": "<git commit SHA of the spec doc>"
+    "commit": "<git commit SHA of the spec doc; null if not available>"
   },
 
   "plan": {
     "path": "<plan doc path written during writing-plans>",
-    "commit": "<git commit SHA of the plan doc>",
+    "commit": "<git commit SHA of the plan doc; null if not available>",
     "task_count": "<number of tasks in the plan>"
   },
 
@@ -292,7 +294,20 @@ Construct the following JSON object from context accumulated throughout this ses
 }
 ```
 
+**Blocker guidance for `kept` outcome:** When `action == "kept"` (user chose Option 3 to pause), set:
+- `stage`: The skill stage where work stopped (e.g., `"finishing-a-development-branch"` if still deciding how to complete)
+- `reason`: `"Human chose to keep branch for later review — iteration paused"`
+- `question_for_human`: A summary of what remains to be decided, e.g., `"Should this be merged to main, converted to a PR, or discarded? What's blocking the decision?"`
+
 ### Write `state/<uuid>.json`
+
+**Important:** Before running the snippets below, construct the run record object in memory from the JSON schema above:
+- **PowerShell:** `$runRecord` (a PSCustomObject or hashtable with all fields from the schema)
+- **Bash:** `$RUN_RECORD_JSON` (a complete JSON string constructed from the schema above)
+
+Also prepare:
+- **PowerShell:** `$loopItemId` (the `loop_item_id` from session context)
+- **Bash:** `$LOOP_ITEM_ID` (the `loop_item_id` from session context)
 
 Ensure the `state/` directory exists, then write the run record as a new file.
 
@@ -316,6 +331,8 @@ print(json.dumps(json.load(sys.stdin), indent=2))
 
 ### Update `work-items/work-items.json`
 
+**Error handling:** If `work-items.json` does not exist or no item matches `loop_item_id`, log a warning message but do not fail the session. The state file is the source of truth; work-items.json is a cache.
+
 1. Read `~/.config/superpowers/loop/work-items/work-items.json`
 2. Find the item where `id == loop_item_id`
 3. Apply updates:
@@ -336,25 +353,86 @@ print(json.dumps(json.load(sys.stdin), indent=2))
 **PowerShell:**
 ```powershell
 $base = "$env:USERPROFILE\.config\superpowers\loop"
-$data = Get-Content "$base\work-items\work-items.json" | ConvertFrom-Json
-$item = $data.items | Where-Object { $_.id -eq $loopItemId }
-# apply status / state_id / blocker / updated_at to $item
-$data | ConvertTo-Json -Depth 20 | Out-File -Encoding utf8 "$base\work-items\work-items.json"
+$workItemsPath = "$base\work-items\work-items.json"
+
+if (-not (Test-Path $workItemsPath)) {
+    Write-Warning "work-items.json not found at $workItemsPath — skipping update"
+} else {
+    try {
+        $data = Get-Content $workItemsPath | ConvertFrom-Json
+        $item = $data.items | Where-Object { $_.id -eq $loopItemId }
+        
+        if ($null -eq $item) {
+            Write-Warning "No item found with id $loopItemId — skipping update"
+        } else {
+            $now = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            
+            if ($outcome -eq "done") {
+                $item.status   = "done"
+                $item.state_id = $uuid
+                $item.updated_at = $now
+            } else {
+                $item.status   = "needs_human"
+                $item.blocker  = [PSCustomObject]@{ 
+                    question = $runRecord.blocker.question_for_human
+                    context  = $runRecord.blocker.reason
+                }
+                $item.updated_at = $now
+            }
+            
+            $data | ConvertTo-Json -Depth 20 | Out-File -Encoding utf8 $workItemsPath
+        }
+    } catch {
+        Write-Warning "Error updating work-items.json: $_"
+    }
+}
 ```
 
 **Bash:**
 ```bash
 base="$HOME/.config/superpowers/loop"
-python3 -c "
+workItemsPath="$base/work-items/work-items.json"
+
+if [ ! -f "$workItemsPath" ]; then
+    echo "WARNING: work-items.json not found at $workItemsPath — skipping update" >&2
+else
+    python3 -c "
 import json
 from datetime import datetime, timezone
-with open('$base/work-items/work-items.json') as f:
-    data = json.load(f)
-item = next(i for i in data['items'] if i['id'] == '$LOOP_ITEM_ID')
-# apply status / state_id / blocker / updated_at to item
-with open('$base/work-items/work-items.json', 'w') as f:
-    json.dump(data, f, indent=2)
+
+workItemsPath = '$workItemsPath'
+loopItemId = '$LOOP_ITEM_ID'
+outcome = '$outcome'
+uuid = '$uuid'
+
+try:
+    with open(workItemsPath) as f:
+        data = json.load(f)
+    
+    item = next((i for i in data['items'] if i['id'] == loopItemId), None)
+    if item is None:
+        print(f'WARNING: No item found with id {loopItemId} — skipping update', file=__import__('sys').stderr)
+    else:
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        
+        if outcome == 'done':
+            item['status'] = 'done'
+            item['state_id'] = uuid
+            item['updated_at'] = now
+        else:
+            item['status'] = 'needs_human'
+            item['blocker'] = {
+                'question': '$runRecord['blocker']['question_for_human']',
+                'context': '$runRecord['blocker']['reason']'
+            }
+            item['updated_at'] = now
+        
+        with open(workItemsPath, 'w') as f:
+            json.dump(data, f, indent=2)
+except Exception as e:
+    print(f'WARNING: Error updating work-items.json: {e}', file=__import__('sys').stderr)
 "
+fi
 ```
 
 ### Report
