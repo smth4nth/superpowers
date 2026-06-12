@@ -35,7 +35,7 @@ def load_config():
         )
         sys.exit(1)
     try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
         log.error(f"Config at {CONFIG_PATH} is not valid JSON: {e}")
         sys.exit(1)
