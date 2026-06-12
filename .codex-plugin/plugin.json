@@ -1,6 +1,6 @@
 {
   "name": "superpowers",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "description": "An agentic skills framework & software development methodology that works: planning, TDD, debugging, and collaboration workflows.",
   "author": {
     "name": "Jesse Vincent",
@@ -21,6 +21,21 @@
     "workflow"
   ],
   "skills": "./skills/",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${PLUGIN_ROOT}/hooks/run-hook.cmd\" session-start",
+            "commandWindows": "cmd /d /s /c \"\\\"%PLUGIN_ROOT%\\hooks\\run-hook.cmd\\\" session-start\"",
+            "statusMessage": "Loading superpowers"
+          }
+        ]
+      }
+    ]
+  },
   "interface": {
     "displayName": "Superpowers",
     "shortDescription": "Planning, TDD, debugging, and delivery workflows for coding agents",
