@@ -215,4 +215,29 @@ Read work-items.json
 
 Both files live at `~/.config/superpowers/loop/` — outside the project directory, not tracked by git. This mirrors the existing auto-memory pattern (`~/.claude/projects/.../memory/`).
 
-The loop controller receives the config dir path as part of its session context.
+---
+
+## Write Point: `finishing-a-development-branch`
+
+State is written as the **last step** of the `finishing-a-development-branch` skill, after the completion action (merge / PR / keep / discard) has been executed and the worktree cleanup decision has been made.
+
+At that point the controller has all information needed to construct the complete run record:
+- `worktree` — branch and path from the worktree setup step
+- `spec` / `plan` — paths and commits recorded during brainstorming and planning
+- `tasks` — per-task implementer and reviewer outcomes accumulated during subagent-driven-development
+- `final_review` — final code reviewer verdict
+- `verification` — test results just run before presenting options
+- `completion` — action chosen, PR URL, worktree_cleaned
+
+The write sequence at the end of `finishing-a-development-branch`:
+
+```
+1. Construct run record from accumulated session context
+2. Append run record to ~/.config/superpowers/loop/state.json
+3. Update work item in ~/.config/superpowers/loop/work-items.json:
+     outcome "done"        → status = "done", state_id = run_id
+     outcome "needs_human" → status = "needs_human", blocker = {...}
+4. Report to human: item complete (or blocked), state written
+```
+
+The path `~/.config/superpowers/loop/` is a hardcoded convention known to the skill — no configuration or path injection required.
