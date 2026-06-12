@@ -8,7 +8,7 @@
 
 ## Two Files
 
-### `~/.config/superpowers/loop/work-items.json`
+### `~/.config/superpowers/loop/work-items/work-items.json`
 
 Human-managed task queue. The human edits this file directly to add tasks and to resolve blocked items.
 
@@ -46,7 +46,7 @@ The loop controller reads this file to pick the next item, and writes back `stat
 | `blocker.question` | string | What the loop needs the human to decide |
 | `blocker.context` | string | What was attempted and why it got stuck |
 | `human_input` | string\|null | Human's answer — filled by human when resolving a blocker |
-| `state_id` | string\|null | Points to the run record in `state.json` — filled when done |
+| `state_id` | string\|null | UUID of the session's state file in `state/` — filled when done (e.g. `"a1b2c3d4-..."`) |
 
 **Status machine:**
 
@@ -65,69 +65,67 @@ needs_human
 
 ---
 
-### `~/.config/superpowers/loop/state.json`
+### `~/.config/superpowers/loop/state/<uuid>.json`
 
-Loop-managed execution log. The loop controller writes to this file. The human reads it for traceability. One run record per completed or blocked session.
+Loop-managed execution log. One file per session, named by UUID. The loop controller creates this file. The human reads it for traceability.
+
+File name: `a1b2c3d4-e5f6-7890-abcd-ef1234567890.json`
 
 ```json
 {
-  "runs": [
+  "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "item_id": "1",
+  "outcome": "done",
+  "started_at": "2026-06-11T10:05:00Z",
+  "completed_at": "2026-06-11T10:47:00Z",
+
+  "worktree": {
+    "branch": "feat/auth-refactor",
+    "path": ".worktrees/feat/auth-refactor"
+  },
+
+  "spec": {
+    "path": "docs/superpowers/specs/2026-06-11-auth-refactor-design.md",
+    "commit": "abc123"
+  },
+
+  "plan": {
+    "path": "docs/superpowers/plans/2026-06-11-auth-refactor.md",
+    "commit": "def456",
+    "task_count": 4
+  },
+
+  "tasks": [
     {
-      "run_id": "r1",
-      "item_id": "1",
-      "outcome": "done",
-      "started_at": "2026-06-11T10:05:00Z",
-      "completed_at": "2026-06-11T10:47:00Z",
-
-      "worktree": {
-        "branch": "feat/auth-refactor",
-        "path": ".worktrees/feat/auth-refactor"
-      },
-
-      "spec": {
-        "path": "docs/superpowers/specs/2026-06-11-auth-refactor-design.md",
-        "commit": "abc123"
-      },
-
-      "plan": {
-        "path": "docs/superpowers/plans/2026-06-11-auth-refactor.md",
-        "commit": "def456",
-        "task_count": 4
-      },
-
-      "tasks": [
-        {
-          "name": "Task 1: Split session and token",
-          "implementer_status": "DONE",
-          "implementer_concerns": null,
-          "spec_review_rounds": 1,
-          "spec_review_result": "passed",
-          "quality_review_rounds": 2,
-          "quality_review_result": "passed",
-          "quality_concerns": "TokenManager 有点大，非阻塞",
-          "commits": ["abc123 feat: split auth module"],
-          "files_changed": ["src/auth/session.ts", "src/auth/token.ts"]
-        }
-      ],
-
-      "final_review": "all requirements met, ready to merge",
-
-      "verification": {
-        "tests_passed": true,
-        "test_count": 42,
-        "build_passed": true
-      },
-
-      "completion": {
-        "action": "pr_created",
-        "pr_url": "https://github.com/org/repo/pull/234",
-        "branch": "feat/auth-refactor",
-        "worktree_cleaned": false
-      },
-
-      "blocker": null
+      "name": "Task 1: Split session and token",
+      "implementer_status": "DONE",
+      "implementer_concerns": null,
+      "spec_review_rounds": 1,
+      "spec_review_result": "passed",
+      "quality_review_rounds": 2,
+      "quality_review_result": "passed",
+      "quality_concerns": "TokenManager 有点大，非阻塞",
+      "commits": ["abc123 feat: split auth module"],
+      "files_changed": ["src/auth/session.ts", "src/auth/token.ts"]
     }
-  ]
+  ],
+
+  "final_review": "all requirements met, ready to merge",
+
+  "verification": {
+    "tests_passed": true,
+    "test_count": 42,
+    "build_passed": true
+  },
+
+  "completion": {
+    "action": "pr_created",
+    "pr_url": "https://github.com/org/repo/pull/234",
+    "branch": "feat/auth-refactor",
+    "worktree_cleaned": false
+  },
+
+  "blocker": null
 }
 ```
 
@@ -135,7 +133,7 @@ Loop-managed execution log. The loop controller writes to this file. The human r
 
 | Field | Description |
 |-------|-------------|
-| `run_id` | Unique run identifier |
+| `run_id` | UUID — matches the filename (`<uuid>.json`) |
 | `item_id` | References the work item in `work-items.json` |
 | `outcome` | `done` or `needs_human` |
 | `started_at` / `completed_at` | Session timestamps |
@@ -180,10 +178,10 @@ Loop-managed execution log. The loop controller writes to this file. The human r
 
 ## Bidirectional Link
 
-- `work-items.json` item `state_id` → `state.json` run `run_id`
-- `state.json` run `item_id` → `work-items.json` item `id`
+- `work-items/work-items.json` item `state_id` → `state/<uuid>.json` filename (= `run_id`)
+- `state/<uuid>.json` field `item_id` → `work-items/work-items.json` item `id`
 
-Both fields are set when a run completes (outcome `done`). For `needs_human` runs, `state_id` on the work item is not set — the work item stays in the queue for retry.
+Both fields are set when a run completes (outcome `done`). For `needs_human` runs, `state_id` on the work item is left `null` — the work item stays in the queue for retry.
 
 ---
 
@@ -213,7 +211,16 @@ Read work-items.json
 
 ## Storage Location
 
-Both files live at `~/.config/superpowers/loop/` — outside the project directory, not tracked by git. This mirrors the existing auto-memory pattern (`~/.claude/projects/.../memory/`).
+Files live outside the project directory, not tracked by git:
+
+```
+~/.config/superpowers/loop/
+  work-items/
+    work-items.json          ← single queue file, human-edited
+  state/
+    <uuid>.json              ← one file per session, loop-written
+    <uuid>.json
+```
 
 ---
 
@@ -232,12 +239,13 @@ At that point the controller has all information needed to construct the complet
 The write sequence at the end of `finishing-a-development-branch`:
 
 ```
-1. Construct run record from accumulated session context
-2. Append run record to ~/.config/superpowers/loop/state.json
-3. Update work item in ~/.config/superpowers/loop/work-items.json:
-     outcome "done"        → status = "done", state_id = run_id
+1. Generate UUID for this session
+2. Construct run record from accumulated session context
+3. Write run record to ~/.config/superpowers/loop/state/<uuid>.json (new file)
+4. Update work item in ~/.config/superpowers/loop/work-items/work-items.json:
+     outcome "done"        → status = "done", state_id = <uuid>
      outcome "needs_human" → status = "needs_human", blocker = {...}
-4. Report to human: item complete (or blocked), state written
+5. Report to human: item complete (or blocked), state written
 ```
 
 The path `~/.config/superpowers/loop/` is a hardcoded convention known to the skill — no configuration or path injection required.
