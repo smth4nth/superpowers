@@ -4,7 +4,14 @@ from pathlib import Path
 
 
 def run(item, claude_cmd="claude"):
-    """Launch a claude session for item. Returns exit code (0=ok, -1=bad project_dir)."""
+    """Launch a claude session for item.
+
+    Returns:
+        0        — success
+        -1       — project_dir does not exist
+        -2       — claude binary not found or not executable
+        non-zero — claude exited with error
+    """
     if not Path(item["project_dir"]).exists():
         return -1
 
@@ -19,8 +26,11 @@ def run(item, claude_cmd="claude"):
         f"loop_item_id: {item['id']}\n"
         f"loop_started_at: {started_at}"
     )
-    result = subprocess.run(
-        [claude_cmd, "-p", prompt, "--dangerously-skip-permissions"],
-        cwd=item["project_dir"],
-    )
-    return result.returncode
+    try:
+        result = subprocess.run(
+            [claude_cmd, "-p", prompt, "--dangerously-skip-permissions"],
+            cwd=item["project_dir"],
+        )
+        return result.returncode
+    except (FileNotFoundError, PermissionError):
+        return -2

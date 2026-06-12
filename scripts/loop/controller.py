@@ -34,7 +34,11 @@ def load_config():
             'Create it with: {"claude_cmd": "claude"}'
         )
         sys.exit(1)
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        log.error(f"Config at {CONFIG_PATH} is not valid JSON: {e}")
+        sys.exit(1)
 
 
 class Controller:
@@ -53,11 +57,16 @@ class Controller:
             self._drain_queue()
 
     def _drain_queue(self):
+        seen = set()
         while True:
             item = work_queue.next_pending()
             if item is None:
                 log.info("Queue empty, watching...")
                 return
+            if item["id"] in seen:
+                log.warning(f"Item {item['id']} still pending after failure — skipping until next file change")
+                return
+            seen.add(item["id"])
             log.info(f"Processing item {item['id']}: {item['title']}")
             exit_code = session.run(
                 item, claude_cmd=self._config.get("claude_cmd", "claude")
@@ -66,6 +75,8 @@ class Controller:
                 reason = (
                     f"project_dir not found: {item['project_dir']}"
                     if exit_code == -1
+                    else f"claude binary not found: {self._config.get('claude_cmd', 'claude')}"
+                    if exit_code == -2
                     else f"claude exited with code {exit_code}"
                 )
                 log.warning(f"Item {item['id']} failed: {reason}")

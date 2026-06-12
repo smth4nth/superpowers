@@ -75,3 +75,8 @@ def test_subprocess_uses_custom_claude_cmd(tmp_path):
     with patch("subprocess.run", return_value=mock_result) as mock_run:
         session.run(_item(tmp_path), claude_cmd="/usr/local/bin/claude")
     assert mock_run.call_args[0][0][0] == "/usr/local/bin/claude"
+
+
+def test_returns_minus_two_when_claude_cmd_not_found(tmp_path):
+    with patch("subprocess.run", side_effect=FileNotFoundError("no such file")):
+        assert session.run(_item(tmp_path), claude_cmd="/nonexistent/claude") == -2
