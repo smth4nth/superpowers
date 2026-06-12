@@ -397,40 +397,36 @@ if [ ! -f "$workItemsPath" ]; then
     echo "WARNING: work-items.json not found at $workItemsPath — skipping update" >&2
 else
     python3 -c "
-import json
+import json, sys
 from datetime import datetime, timezone
 
-workItemsPath = '$workItemsPath'
-loopItemId = '$LOOP_ITEM_ID'
-outcome = '$outcome'
-uuid = '$uuid'
+with open(f'{base}/work-items/work-items.json') as f:
+    data = json.load(f)
 
-try:
-    with open(workItemsPath) as f:
-        data = json.load(f)
-    
-    item = next((i for i in data['items'] if i['id'] == loopItemId), None)
-    if item is None:
-        print(f'WARNING: No item found with id {loopItemId} — skipping update', file=__import__('sys').stderr)
-    else:
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        
-        if outcome == 'done':
-            item['status'] = 'done'
-            item['state_id'] = uuid
-            item['updated_at'] = now
-        else:
-            item['status'] = 'needs_human'
-            item['blocker'] = {
-                'question': '$runRecord['blocker']['question_for_human']',
-                'context': '$runRecord['blocker']['reason']'
-            }
-            item['updated_at'] = now
-        
-        with open(workItemsPath, 'w') as f:
-            json.dump(data, f, indent=2)
-except Exception as e:
-    print(f'WARNING: Error updating work-items.json: {e}', file=__import__('sys').stderr)
+run = json.loads('''$RUN_RECORD_JSON''')
+item = next((i for i in data['items'] if i['id'] == '$LOOP_ITEM_ID'), None)
+if item is None:
+    print('Warning: item $LOOP_ITEM_ID not found in work-items.json', file=sys.stderr)
+    sys.exit(0)
+
+now = datetime.now(timezone.utc).isoformat()
+outcome = run.get('outcome')
+
+if outcome == 'done':
+    item['status'] = 'done'
+    item['state_id'] = '$uuid'
+    item['updated_at'] = now
+else:
+    blocker = run.get('blocker') or {}
+    item['status'] = 'needs_human'
+    item['blocker'] = {
+        'question': blocker.get('question_for_human', ''),
+        'context': blocker.get('reason', '')
+    }
+    item['updated_at'] = now
+
+with open(f'{base}/work-items/work-items.json', 'w') as f:
+    json.dump(data, f, indent=2)
 "
 fi
 ```
