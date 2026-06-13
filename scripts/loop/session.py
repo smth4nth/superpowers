@@ -12,7 +12,7 @@ def run(item, claude_cmd="claude"):
         -2       — claude binary not found or not executable
         non-zero — claude exited with error
     """
-    if not Path(item["project_dir"]).exists():
+    if not Path(item["project_dir"]).expanduser().exists():
         return -1
 
     started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

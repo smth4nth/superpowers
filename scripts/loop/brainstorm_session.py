@@ -34,7 +34,7 @@ def run(item, claude_cmd="claude", _claude_dir=None):
         session_id (str) — spec committed, session captured
         None             — user abandoned or error
     """
-    project_dir = item["project_dir"]
+    project_dir = str(Path(item["project_dir"]).expanduser())
     if not Path(project_dir).exists():
         return None
 
