@@ -55,3 +55,13 @@ def test_write_done_sets_status_and_updates_timestamp(tmp_path):
 def test_write_done_noop_when_file_missing(tmp_path):
     tq.write_done({"id": "1"}, path=str(tmp_path / "nope.json"))
     # must not raise
+
+
+def test_write_done_noop_when_id_not_found(tmp_path):
+    path = _write(tmp_path, [
+        {"id": "1", "status": "pending", "title": "T",
+         "updated_at": "2026-06-12T00:00:00Z"},
+    ])
+    tq.write_done({"id": "999"}, path=path)
+    data = json.loads(Path(path).read_text())
+    assert data["items"][0]["status"] == "pending"  # unchanged

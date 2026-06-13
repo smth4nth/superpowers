@@ -28,7 +28,7 @@ def write_done(item, path=None):
         return
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
-        for ti in data["items"]:
+        for ti in data.get("items", []):
             if ti["id"] == item["id"]:
                 ti["status"] = "done"
                 ti["updated_at"] = (
