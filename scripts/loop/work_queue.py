@@ -42,3 +42,29 @@ def write_needs_human(item, reason, path=None):
         p.write_text(json.dumps(data, indent=2), encoding="utf-8")
     except (json.JSONDecodeError, KeyError, OSError):
         pass
+
+
+def add_item(todo_item, session_id, path=None):
+    p = Path(path) if path else _DEFAULT
+    if not p.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"items": []}, indent=2), encoding="utf-8")
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        data["items"].append({
+            "id": todo_item["id"],
+            "title": todo_item["title"],
+            "description": todo_item["description"],
+            "project_dir": todo_item["project_dir"],
+            "status": "pending",
+            "session_id": session_id,
+            "created_at": todo_item.get("created_at", now),
+            "updated_at": now,
+            "blocker": None,
+            "human_input": None,
+            "state_id": None,
+        })
+        p.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except (json.JSONDecodeError, KeyError, OSError):
+        pass
