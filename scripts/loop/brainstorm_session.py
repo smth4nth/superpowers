@@ -1,7 +1,47 @@
+import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
+
+
+def _make_win_launch_script(item, claude_cmd):
+    """Write a temp PowerShell script that prints task context then launches claude."""
+    title = item.get("title", "")
+    description = item.get("description", "")
+    # PS here-strings end with '@' at column 0 — escape that edge case
+    title_safe = title.replace("'@", "' @")
+    desc_safe = description.replace("'@", "' @")
+    # Quote claude_cmd for PowerShell call operator
+    cmd_quoted = f"'{claude_cmd}'" if " " in claude_cmd else claude_cmd
+
+    script = f"""\
+$title = @'
+{title_safe}
+'@
+$desc = @'
+{desc_safe}
+'@
+$host.UI.RawUI.WindowTitle = "Brainstorm: $($title.Trim())"
+Write-Host ""
+Write-Host ("=" * 60) -ForegroundColor Cyan
+Write-Host "  BRAINSTORM TASK" -ForegroundColor Cyan
+Write-Host ("=" * 60) -ForegroundColor Cyan
+Write-Host $title.Trim() -ForegroundColor Yellow
+Write-Host ""
+Write-Host $desc.Trim()
+Write-Host ""
+Write-Host ("=" * 60) -ForegroundColor Cyan
+Write-Host ""
+& {cmd_quoted}
+"""
+    f = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".ps1", delete=False, encoding="utf-8-sig"
+    )
+    f.write(script)
+    f.close()
+    return f.name
 
 
 def _spec_committed(project_dir, spec_path):
@@ -44,16 +84,20 @@ def run(item, claude_cmd="claude", _claude_dir=None):
     claude_dir = Path(_claude_dir) if _claude_dir else Path.home() / ".claude" / "projects"
     sessions_before = set(claude_dir.glob("**/*.jsonl")) if claude_dir.exists() else set()
 
+    script_path = None
     try:
         if sys.platform == "win32":
+            script_path = _make_win_launch_script(item, claude_cmd)
             proc = subprocess.Popen(
-                [claude_cmd],
+                ["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path],
                 cwd=project_dir,
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
         else:
             proc = subprocess.Popen([claude_cmd], cwd=project_dir)
     except (FileNotFoundError, PermissionError):
+        if script_path:
+            os.unlink(script_path)
         return None
 
     new_spec = None
@@ -84,6 +128,11 @@ def run(item, claude_cmd="claude", _claude_dir=None):
             new_spec = sorted(candidates, key=lambda p: p.stat().st_mtime)[-1]
 
     if new_spec is None:
+        if script_path:
+            try:
+                os.unlink(script_path)
+            except OSError:
+                pass
         return None
 
     sessions_after = set(claude_dir.glob("**/*.jsonl")) if claude_dir.exists() else set()
@@ -92,7 +141,18 @@ def run(item, claude_cmd="claude", _claude_dir=None):
     else:
         new_sessions = sessions_after
     if not new_sessions:
+        if script_path:
+            try:
+                os.unlink(script_path)
+            except OSError:
+                pass
         return None
+
+    if script_path:
+        try:
+            os.unlink(script_path)
+        except OSError:
+            pass
 
     return Path(
         sorted(new_sessions, key=lambda p: p.stat().st_mtime)[-1]
