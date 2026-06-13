@@ -104,7 +104,7 @@ Manages one interactive brainstorm session. Returns the `session_id` string on s
 3. Snapshot `~/.claude/projects/**/*.jsonl`
 4. Launch Claude in a new terminal window using `CREATE_NEW_CONSOLE` (Windows) to retain the process handle
 5. Poll `specs_dir` every 2 seconds while `proc.poll() is None`
-6. On new spec detected: sleep 3 seconds (allow git commit to complete), then `proc.terminate()`
+6. On new spec detected: poll `git status --short` in `project_dir` until the new spec file is no longer listed as untracked/modified (i.e. committed), then `proc.terminate()`. Timeout after 30 seconds and terminate anyway.
 7. Find the new `.jsonl` file — its stem is the `session_id`
 8. Return `session_id`, or `None` if no new spec or no new session file found
 
@@ -189,7 +189,7 @@ User adds item to todo-items.json
       → user brainstorms in new window
       → spec written + committed by Claude
       → new spec file detected
-      → sleep(3) → proc.terminate()           ← window closes
+      → poll git status until spec committed (max 30s) → proc.terminate()  ← window closes
       → find new .jsonl → extract session_id
       → return session_id
   → work_queue.add_item(item, session_id)     ← write to work-items.json
