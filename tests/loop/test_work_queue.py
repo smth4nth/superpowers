@@ -84,6 +84,21 @@ def test_add_item_appends_work_item(tmp_path):
     assert wi["human_input"] is None
 
 
+def test_add_item_copies_agent_when_present(tmp_path):
+    path = _write(tmp_path, [])
+    todo_item = {
+        "id": "1",
+        "title": "Fix auth",
+        "description": "Refactor auth.ts",
+        "project_dir": str(tmp_path),
+        "created_at": "2026-06-12T10:00:00Z",
+        "agent": "codex",
+    }
+    wq.add_item(todo_item, session_id="abc-123", path=path)
+    data = json.loads(Path(path).read_text())
+    assert data["items"][0]["agent"] == "codex"
+
+
 def test_add_item_creates_file_when_missing(tmp_path):
     path = str(tmp_path / "work-items.json")
     todo_item = {

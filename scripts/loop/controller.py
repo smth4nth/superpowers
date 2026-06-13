@@ -6,8 +6,9 @@ import threading
 import time
 from pathlib import Path
 
+import agent_runner
+from agent_runner import UNKNOWN_AGENT_EXIT
 import work_queue
-import session
 from watcher import WorkItemsHandler
 from watchdog.observers import Observer
 
@@ -68,16 +69,21 @@ class Controller:
                 return
             seen.add(item["id"])
             log.info(f"Processing item {item['id']}: {item['title']}")
-            exit_code = session.run(
-                item, claude_cmd=self._config.get("claude_cmd", "claude")
-            )
+            exit_code = agent_runner.run_work_item(item, self._config)
             if exit_code != 0:
+                selected_agent = (
+                    item.get("agent")
+                    or self._config.get("default_agent")
+                    or "claude"
+                )
                 reason = (
                     f"project_dir not found: {item['project_dir']}"
                     if exit_code == -1
-                    else f"claude binary not found: {self._config.get('claude_cmd', 'claude')}"
+                    else f"{selected_agent} binary not found: {self._config.get('claude_cmd', selected_agent)}"
                     if exit_code == -2
-                    else f"claude exited with code {exit_code}"
+                    else f"unknown agent: {selected_agent}"
+                    if exit_code == UNKNOWN_AGENT_EXIT
+                    else f"{selected_agent} exited with code {exit_code}"
                 )
                 log.warning(f"Item {item['id']} failed: {reason}")
                 work_queue.write_needs_human(item, reason=reason)

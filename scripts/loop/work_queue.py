@@ -52,7 +52,7 @@ def add_item(todo_item, session_id, path=None):
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        data["items"].append({
+        work_item = {
             "id": todo_item["id"],
             "title": todo_item["title"],
             "description": todo_item["description"],
@@ -64,7 +64,10 @@ def add_item(todo_item, session_id, path=None):
             "blocker": None,
             "human_input": None,
             "state_id": None,
-        })
+        }
+        if todo_item.get("agent"):
+            work_item["agent"] = todo_item["agent"]
+        data["items"].append(work_item)
         p.write_text(json.dumps(data, indent=2), encoding="utf-8")
     except (json.JSONDecodeError, KeyError, OSError):
         pass

@@ -5,9 +5,9 @@ import sys
 import threading
 from pathlib import Path
 
+import agent_runner
 import todo_queue
 import work_queue
-import brainstorm_session
 from watcher import WorkItemsHandler
 from watchdog.observers import Observer
 
@@ -71,9 +71,7 @@ class BrainstormController:
                 return
             seen.add(item["id"])
             log.info(f"Brainstorming item {item['id']}: {item['title']}")
-            session_id = brainstorm_session.run(
-                item, claude_cmd=self._config.get("claude_cmd", "claude")
-            )
+            session_id = agent_runner.run_brainstorm_item(item, self._config)
             if session_id:
                 work_queue.add_item(item, session_id)
                 todo_queue.write_done(item)
