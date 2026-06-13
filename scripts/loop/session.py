@@ -20,6 +20,8 @@ def run(item, claude_cmd="claude"):
         f"\nhuman_input: {item['human_input']}" if item.get("human_input") else ""
     )
     prompt = (
+        f"[AUTONOMOUS MODE: proceed through all steps without asking for human input or approval. "
+        f"Make all design decisions based on the task description below.]\n\n"
         f"{item['title']}\n\n"
         f"{item['description']}"
         f"{human_input_line}\n\n"
