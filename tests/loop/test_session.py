@@ -80,3 +80,44 @@ def test_subprocess_uses_custom_claude_cmd(tmp_path):
 def test_returns_minus_two_when_claude_cmd_not_found(tmp_path):
     with patch("subprocess.run", side_effect=FileNotFoundError("no such file")):
         assert session.run(_item(tmp_path), claude_cmd="/nonexistent/claude") == -2
+
+
+def test_uses_resume_flag_when_session_id_present(tmp_path):
+    mock_result = MagicMock(returncode=0)
+    item = _item(tmp_path, session_id="abc-123-def")
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        session.run(item)
+    cmd = mock_run.call_args[0][0]
+    assert "--resume" in cmd
+    assert "abc-123-def" in cmd
+
+
+def test_skips_resume_when_no_session_id(tmp_path):
+    mock_result = MagicMock(returncode=0)
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        session.run(_item(tmp_path))
+    cmd = mock_run.call_args[0][0]
+    assert "--resume" not in cmd
+
+
+def test_resume_prompt_contains_required_fields(tmp_path):
+    mock_result = MagicMock(returncode=0)
+    item = _item(tmp_path, session_id="abc-123")
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        session.run(item)
+    # cmd: [claude, "--resume", session_id, "-p", prompt, "--dangerously-skip-permissions"]
+    prompt = mock_run.call_args[0][0][4]
+    assert "AUTONOMOUS MODE" in prompt
+    assert "writing-plans" in prompt
+    assert "loop_item_id: 1" in prompt
+    assert "loop_started_at:" in prompt
+
+
+def test_resume_prompt_omits_title_and_description(tmp_path):
+    mock_result = MagicMock(returncode=0)
+    item = _item(tmp_path, session_id="abc-123")
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        session.run(item)
+    prompt = mock_run.call_args[0][0][4]
+    assert "Fix auth bug" not in prompt
+    assert "Refactor auth.ts" not in prompt
